@@ -3,6 +3,7 @@ from argparse import ArgumentParser, Namespace
 from typing import Optional, Union, List
 from pytorch_lightning import LightningDataModule
 from transformers import BertTokenizer
+from transformers import ElectraTokenizer
 from transformers.utils import logging
 import torch
 from torch.utils.data import DataLoader, TensorDataset
@@ -20,7 +21,7 @@ class SemanticMatchingDataModule(LightningDataModule):
         self.train_batch_size = hparams.train_batch_size
         self.val_batch_size = hparams.val_batch_size
         self.loader_workers = hparams.loader_workers
-        self.tokenizer = BertTokenizer.from_pretrained(hparams.model_name_or_path)
+        self.tokenizer = ElectraTokenizer.from_pretrained(hparams.model_name_or_path)
         self.processor = SemanticMatchingProcessor()
 
         self.train_features = None

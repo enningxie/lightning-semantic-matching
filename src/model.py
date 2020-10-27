@@ -1,18 +1,16 @@
 # Created by xieenning at 2020/10/19
-import logging as log
-import pandas as pd
 from argparse import ArgumentParser, Namespace
 import torch
 from torch import nn
-from torch.utils.data import DataLoader, RandomSampler
 import numpy as np
-from typing import Union, List, Optional
+from typing import List, Any
 from collections import OrderedDict
-from torchnlp.encoders import LabelEncoder
 from torchnlp.utils import collate_tensors, lengths_to_mask
 from pytorch_lightning import LightningModule, LightningDataModule
 from transformers import BertForSequenceClassification, BertConfig, BertModel, BertTokenizer
+from transformers import ElectraForSequenceClassification, ElectraConfig, ElectraTokenizer
 from transformers import AdamW
+from transformers.tokenization_utils_base import BatchEncoding
 
 
 class SemanticMatchingClassifier(LightningModule):
@@ -24,7 +22,8 @@ class SemanticMatchingClassifier(LightningModule):
 
     def __init__(self, hparams: Namespace) -> None:
         super().__init__()
-
+        if isinstance(hparams, dict):
+            hparams = hparams['hparams']
         self.save_hyperparameters()
         self.hparams = hparams
         self.model_name_or_path = hparams.model_name_or_path
@@ -38,8 +37,8 @@ class SemanticMatchingClassifier(LightningModule):
 
     def __build_model(self):
         """Init BERT model + tokenizer + classification head."""
-        config = BertConfig.from_pretrained(self.model_name_or_path, num_labels=self.num_labels)
-        return BertForSequenceClassification.from_pretrained(self.model_name_or_path, config=config)
+        config = ElectraConfig.from_pretrained(self.model_name_or_path, num_labels=self.num_labels)
+        return ElectraForSequenceClassification.from_pretrained(self.model_name_or_path, config=config)
 
     def __build_loss(self) -> None:
         """Initializes the loss functions."""
@@ -95,7 +94,8 @@ class SemanticMatchingClassifier(LightningModule):
         except RuntimeError:
             raise Exception("Label encoder found an unknown label.")
 
-    def forward(self, input_ids, attention_mask, token_type_ids, label):
+    def forward(self, input_ids, attention_mask, token_type_ids, label=None):
+
         return self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -139,12 +139,16 @@ class SemanticMatchingClassifier(LightningModule):
 
         val_acc = torch.sum(y == y_hat).item() / (len(y) * 1.0)
         val_acc = torch.tensor(val_acc)
+        self.log("val_loss", loss_val)
+        self.log("val_acc", val_acc)
 
         output = OrderedDict({"val_loss": loss_val, "val_acc": val_acc})
         # can also return just a scalar instead of a dict (return loss_val)
         return output
 
-    def validation_end(self, outputs: list) -> dict:
+    def validation_epoch_end(
+        self, outputs: List[Any]
+    ) -> None:
         """ Function that takes as input a list of dictionaries returned by the validation_step
         function and measures the model performance accross the entire validation set.
 
@@ -156,10 +160,6 @@ class SemanticMatchingClassifier(LightningModule):
 
         self.log("val_loss", val_loss_mean, prog_bar=True)
         self.log("val_acc", val_acc_mean, prog_bar=True)
-        result = {
-            "val_loss": val_loss_mean,
-        }
-        return result
 
     def configure_optimizers(self):
         """ Sets different Learning rates for different parameter groups. """
@@ -187,9 +187,10 @@ class SemanticMatchingClassifier(LightningModule):
         Returns:
             - updated parser
         """
+        # "/Data/public/pretrained_models/pytorch/chinese-bert-wwm-ext"
         parser.add_argument(
             "--model_name_or_path",
-            default="/Data/enningxie/Pretrained_models/transformers_test/bert-base-uncased",
+            default="/Data/public/pretrained_models/chinese-electra-180g-base-discriminator",
             type=str,
             help="Encoder model to be used.",
         )
